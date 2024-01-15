@@ -93,6 +93,7 @@ public class CommandeService {
      * @param produitRef  la clé du produit
      * @param quantite    la quantité commandée (positive)
      * @return la ligne de commande créée
+     *
      * @throws java.util.NoSuchElementException                si la commande ou le
      *                                                         produit n'existe pas
      * @throws IllegalStateException                           si il n'y a pas assez
@@ -104,33 +105,70 @@ public class CommandeService {
      * @throws jakarta.validation.ConstraintViolationException si la quantité n'est
      *                                                         pas positive
      */
-    @Transactional
+
+
+
     public Ligne ajouterLigne(int commandeNum, int produitRef, @Positive int quantite) {
         // TODO : implémenter cette méthode
-        throw new UnsupportedOperationException("Pas encore implémenté");
-    }
+        // On vérifie que la commande existe et qu'elle n'est pas envoyée
+        var commande = commandeDao.findById(commandeNum).orElseThrow();
+        if (commande.getEnvoyeele() != null) {
+            throw new IllegalStateException("la commande est déjà envoyé");
+        }
+        // On vérifie que le produit existe et qu'il est disponible
+        var produit = produitDao.findById(produitRef).orElseThrow();
+        if (produit.isIndisponible()) {
+            throw new IllegalStateException("le produit est indisponible ");
+        }
+        // On récupère la quantité en stock et on vérifie qu'lle est ps négative
+        var nbArticles = produit.getUnitesEnStock();
 
-    /**
-     * Service métier : Enregistre l'expédition d'une commande connue par sa clé
-     * Règles métier :
-     * - la commande doit exister
-     * - la commande ne doit pas être déjà envoyée (le champ 'envoyeele' doit être
-     * null)
-     * - On renseigne la date d'expédition (envoyeele) avec la date du jour
-     * - Pour chaque produit dans les lignes de la commande :
-     * décrémente la quantité en stock (Produit.unitesEnStock) de la quantité dans
-     * la commande
-     * décrémente la quantité commandée (Produit.unitesCommandees) de la quantité
-     * dans la commande
-     *
-     * @param commandeNum la clé de la commande
-     * @return la commande mise à jour
-     * @throws java.util.NoSuchElementException si la commande n'existe pas
-     * @throws IllegalStateException            si la commande a déjà été envoyée
-     */
-    @Transactional
-    public Commande enregistreExpedition(int commandeNum) {
-        // TODO : implémenter cette méthode
-        throw new UnsupportedOperationException("Pas encore implémenté");
-    }
+        // On ajoute une ligne à la commande en vérifiant que la quantité commandée est disponible
+        if (nbArticles >= quantite) {
+            var ligne = new Ligne(commande, produit, quantite);
+        } else {
+            throw new IllegalStateException("Il n'y a pas assez de stock");
+        }
+
+
+
+        /**
+         * Service métier : Enregistre l'expédition d'une commande connue par sa clé
+         * Règles métier :
+         * - la commande doit exister
+         * - la commande ne doit pas être déjà envoyée (le champ 'envoyeele' doit être
+         * null)
+         * - On renseigne la date d'expédition (envoyeele) avec la date du jour
+         * - Pour chaque produit dans les lignes de la commande :
+         * décrémente la quantité en stock (Produit.unitesEnStock) de la quantité dans
+         * la commande
+         * décrémente la quantité commandée (Produit.unitesCommandees) de la quantité
+         * dans la commande
+         *
+         * @param commandeNum la clé de la commande
+         * @return la commande mise à jour
+         * @throws java.util.NoSuchElementException si la commande n'existe pas
+         * @throws IllegalStateException            si la commande a déjà été envoyée
+         */
+
+        @Transactional
+        public Commande enregistreExpedition(int commandeNum) {
+            // vérifie que la commande existe
+            var commande = commandeDao.findById(commandeNum).orElseThrow();
+
+            // vérifie que la commande n'est pas déjà envoyé
+            if(commande.getEnvoyeele()!=null){
+                throw new IllegalStateException("La commande a déjà été envoyé");
+            }
+
+            for (Ligne l : commande.getLignes()){
+                //décrémente la quantité en stock
+                l.getProduit().setUnitesEnStock(l.getProduit().getUnitesEnStock()-l.getQuantite());
+                //décrémente la quantité commandée
+                l.getProduit().setUnitesCommandees(l.getProduit().getUnitesCommandees()-l.getQuantite());
+            }
+            // On renseigne la date d'expédition (envoyeele) avec la date du jour
+            commande.setEnvoyeele(LocalDate.now());
+            return commande;
+        }
 }
